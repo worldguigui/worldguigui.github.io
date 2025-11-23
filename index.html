@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Evolution: 稳定版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Evolution: 性能优化版</title>
     <style>
         body {
             margin: 0; padding: 0;
@@ -12,12 +12,15 @@
             font-family: 'Segoe UI', Roboto, sans-serif;
             overflow: hidden;
             user-select: none;
+            -webkit-user-select: none; /* Safari */
+            touch-action: none; /* 禁止移动端默认手势 */
         }
         #gameContainer { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         canvas {
             box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
             background: #000; 
             cursor: crosshair;
+            display: block;
         }
         
         #ui-layer {
@@ -35,6 +38,7 @@
             border-left: 4px solid #00ffff;
             border-radius: 0 8px 8px 0;
             transition: all 0.3s;
+            max-width: 200px; /* 防止在小屏过宽 */
         }
         #weapon-name { font-size: 20px; font-weight: 900; color: #00ffff; text-transform: uppercase; letter-spacing: 1px; }
         #weapon-desc { font-size: 12px; color: #bbb; margin-top: 4px; }
@@ -44,11 +48,13 @@
             display: flex; flex-direction: column-reverse; gap: 4px;
             pointer-events: none;
             max-height: 300px; overflow: hidden;
+            width: 200px; /* 限制宽度防止遮挡 */
         }
         .mod-item {
             font-size: 11px; color: #ddd; background: rgba(0,0,0,0.6);
             padding: 3px 8px; border-radius: 4px; border-left: 3px solid #ffd700;
             animation: slideIn 0.3s ease-out;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         @keyframes slideIn { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
@@ -59,9 +65,15 @@
             display: flex; flex-direction: column;
             justify-content: center; align-items: center;
             backdrop-filter: blur(8px);
+            padding: 20px; box-sizing: border-box;
         }
         
-        .class-container { display: flex; gap: 25px; margin-top: 30px; flex-wrap: wrap; justify-content: center; }
+        .class-container { 
+            display: flex; gap: 25px; margin-top: 30px; 
+            flex-wrap: wrap; justify-content: center; 
+            max-width: 100%; overflow-y: auto;
+            padding-bottom: 20px;
+        }
         .card {
             width: 200px; height: 320px;
             background: linear-gradient(160deg, #1a1a2e, #12121a);
@@ -70,8 +82,9 @@
             transition: 0.2s; position: relative; overflow: hidden;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             display: flex; flex-direction: column; align-items: center;
+            flex-shrink: 0; /* 防止被压缩 */
         }
-        .card:hover { transform: translateY(-10px); border-color: #00ffff; box-shadow: 0 0 30px rgba(0, 255, 255, 0.2); }
+        .card:hover, .card:active { transform: translateY(-5px); border-color: #00ffff; box-shadow: 0 0 30px rgba(0, 255, 255, 0.2); }
         .card-icon { font-size: 36px; margin: 15px 0; }
         .card-title { font-size: 18px; font-weight: bold; color: #fff; margin-bottom: 10px; }
         .card-tag { background: #333; color: #0ff; padding: 2px 6px; font-size: 10px; border-radius: 3px; margin-bottom: 10px; text-transform: uppercase; }
@@ -83,6 +96,24 @@
             border-radius: 4px; transition: 0.2s;
         }
         button.action-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px #ff0055; }
+
+        /* 移动端适配 CSS */
+        @media (max-width: 768px) {
+            #ui-layer { transform: scale(0.9); transform-origin: top left; }
+            #mods-container { width: 150px; bottom: 10px; left: 10px; }
+            
+            .class-container { gap: 10px; margin-top: 15px; }
+            .card {
+                width: 140px; height: 200px; /* 缩小卡片 */
+                padding: 10px;
+            }
+            .card-icon { font-size: 28px; margin: 8px 0; }
+            .card-title { font-size: 14px; margin-bottom: 5px; }
+            .card-desc { font-size: 11px; line-height: 1.2; }
+            
+            h1 { font-size: 24px !important; }
+            button.action-btn { padding: 10px 30px; font-size: 16px; margin-top: 15px; }
+        }
     </style>
 </head>
 <body>
@@ -103,13 +134,13 @@
     <div id="mods-container"></div>
 
     <div id="start-screen" class="overlay-panel">
-        <h1 style="color: #fff; text-shadow: 0 0 15px #00ffff; font-size: 32px; letter-spacing: 3px;">NEON EVOLUTION</h1>
-        <p style="color: #666; font-size: 12px; margin-bottom: 10px;">SYSTEM STABLE</p>
+        <h1 style="color: #fff; text-shadow: 0 0 15px #00ffff; font-size: 32px; letter-spacing: 3px; text-align: center;">NEON EVOLUTION</h1>
+        <p style="color: #666; font-size: 12px; margin-bottom: 10px;">SYSTEM STABLE // OPTIMIZED CORE</p>
         <div class="class-container" id="start-cards"></div>
     </div>
 
     <div id="upgrade-panel" class="overlay-panel" style="display: none;">
-        <h1 style="color: #ffd700; text-shadow: 0 0 20px orange; font-size: 28px;">SYSTEM UPGRADE</h1>
+        <h1 style="color: #ffd700; text-shadow: 0 0 20px orange; font-size: 28px; text-align: center;">SYSTEM UPGRADE</h1>
         <div class="class-container" id="upgrade-cards"></div>
     </div>
 
@@ -122,10 +153,33 @@
 
 <script>
     const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d', { alpha: false }); // 优化：关闭alpha通道
     
+    // 适配 Retina 屏和移动端分辨率
+    let dpr = window.devicePixelRatio || 1;
+    // 限制最大 dpr 为 2 以保证性能
+    dpr = Math.min(dpr, 2); 
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        canvas.style.width = window.innerWidth + 'px';
+        canvas.style.height = window.innerHeight + 'px';
+        ctx.scale(dpr, dpr);
+    }
+    resizeCanvas();
+    
+    // 优化 1: 预渲染辉光 Sprite (替代 shadowBlur)
+    const glowSprite = document.createElement('canvas');
+    glowSprite.width = 64; glowSprite.height = 64;
+    const gCtx = glowSprite.getContext('2d');
+    const grad = gCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+    grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.2)');
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    gCtx.fillStyle = grad;
+    gCtx.fillRect(0, 0, 64, 64);
+
     const WEAPONS = {
         rapid: { 
             name: "毒蛇 (Viper)", type: 'rapid', desc: "高频 / 触发流",
@@ -185,29 +239,39 @@
             this.rows = Math.ceil(height / size);
             this.cells = Array.from({ length: this.cols * this.rows }, () => []);
         }
+        
+        // 辅助：处理边界
         getGridIndex(x, y) {
             const col = Math.floor(x / this.size);
             const row = Math.floor(y / this.size);
             if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return -1;
             return row * this.cols + col;
         }
+
         add(entity) {
             const index = this.getGridIndex(entity.x, entity.y);
             if (index !== -1) this.cells[index].push(entity);
         }
-        query(x, y) {
+
+        // 优化 2: 零GC查询 (传入回调函数，不返回数组)
+        query(x, y, callback) {
             const col = Math.floor(x / this.size);
             const row = Math.floor(y / this.size);
-            const nearby = [];
+            
+            // 检查周围 3x3 范围
             for (let r = row - 1; r <= row + 1; r++) {
                 for (let c = col - 1; c <= col + 1; c++) {
-                    const index = r * this.cols + c;
-                    if (index >= 0 && index < this.cells.length) {
-                        nearby.push(...this.cells[index]);
+                    // 内联边界检查
+                    if (c >= 0 && c < this.cols && r >= 0 && r < this.rows) {
+                        const index = r * this.cols + c;
+                        const cell = this.cells[index];
+                        // 遍历该格子的实体
+                        for (let i = 0, len = cell.length; i < len; i++) {
+                            callback(cell[i]);
+                        }
                     }
                 }
             }
-            return nearby;
         }
         clear() { this.cells.forEach(cell => cell.length = 0); }
     }
@@ -216,17 +280,20 @@
     let gridCacheCanvas, gridCacheCtx, cacheReady = false;
     function initCache() {
         gridCacheCanvas = document.createElement('canvas');
-        gridCacheCanvas.width = canvas.width;
-        gridCacheCanvas.height = canvas.height;
+        gridCacheCanvas.width = window.innerWidth;
+        gridCacheCanvas.height = window.innerHeight;
         gridCacheCtx = gridCacheCanvas.getContext('2d');
+        
+        // 绘制背景
         gridCacheCtx.fillStyle = '#050505';
-        gridCacheCtx.fillRect(0, 0, canvas.width, canvas.height);
+        gridCacheCtx.fillRect(0, 0, gridCacheCanvas.width, gridCacheCanvas.height);
+        
         const spacing = 40;
         gridCacheCtx.strokeStyle = 'rgba(0, 255, 255, 0.05)';
         gridCacheCtx.lineWidth = 1;
         gridCacheCtx.beginPath();
-        for (let x = 0; x < canvas.width; x += spacing) { gridCacheCtx.moveTo(x, 0); gridCacheCtx.lineTo(x, canvas.height); }
-        for (let y = 0; y < canvas.height; y += spacing) { gridCacheCtx.moveTo(0, y); gridCacheCtx.lineTo(canvas.width, y); }
+        for (let x = 0; x < gridCacheCanvas.width; x += spacing) { gridCacheCtx.moveTo(x, 0); gridCacheCtx.lineTo(x, gridCacheCanvas.height); }
+        for (let y = 0; y < gridCacheCanvas.height; y += spacing) { gridCacheCtx.moveTo(0, y); gridCacheCtx.lineTo(gridCacheCanvas.width, y); }
         gridCacheCtx.stroke();
         cacheReady = true;
     }
@@ -240,11 +307,18 @@
         POOL[type].push(obj);
     }
 
+    // 优化 3: 距离平方计算 (更快)
+    function distSq(x1, y1, x2, y2) {
+        const dx = x1 - x2;
+        const dy = y1 - y2;
+        return dx * dx + dy * dy;
+    }
+
     // --- 实体类 ---
 
     class Hero {
         constructor() {
-            this.x = canvas.width / 2; this.y = canvas.height / 2;
+            this.x = window.innerWidth / 2; this.y = window.innerHeight / 2;
             this.angle = 0; this.cooldown = 0;
             this.size = 12;
         }
@@ -261,7 +335,12 @@
         draw() {
             ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
             const w = WEAPONS[game.currentWeaponKey];
-            ctx.shadowBlur = 10; ctx.shadowColor = w.color;
+            
+            // 优化渲染：使用 sprite 辉光
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.drawImage(glowSprite, -40, -40, 80, 80); // 绘制发光层
+            ctx.globalCompositeOperation = 'source-over';
+
             ctx.fillStyle = '#222'; ctx.strokeStyle = w.color; ctx.lineWidth = 2;
             ctx.beginPath(); 
             ctx.moveTo(12, 0); ctx.lineTo(-8, 8); ctx.lineTo(-5, 0); ctx.lineTo(-8, -8); 
@@ -284,10 +363,15 @@
         update() { this.x += this.vx; this.y += this.vy; this.life--; }
         draw() {
             if (!this.active) return;
+            // 优化渲染
             ctx.fillStyle = this.color;
             ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill();
+            
+            // 简单拖尾代替辉光
             ctx.strokeStyle = this.color; ctx.lineWidth = this.radius;
+            ctx.globalAlpha = 0.5;
             ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.x - this.vx*2, this.y - this.vy*2); ctx.stroke();
+            ctx.globalAlpha = 1.0;
         }
     }
 
@@ -295,12 +379,14 @@
         constructor() { this.active = true; this.init(); }
         init() {
             this.active = true;
+            const w = window.innerWidth;
+            const h = window.innerHeight;
             const side = Math.floor(Math.random() * 4);
             const padding = 20; 
-            if(side===0){ this.x=Math.random()*canvas.width; this.y=padding; }
-            else if(side===1){ this.x=canvas.width-padding; this.y=Math.random()*canvas.height; }
-            else if(side===2){ this.x=Math.random()*canvas.width; this.y=canvas.height-padding; }
-            else{ this.x=padding; this.y=Math.random()*canvas.height; }
+            if(side===0){ this.x=Math.random()*w; this.y=padding; }
+            else if(side===1){ this.x=w-padding; this.y=Math.random()*h; }
+            else if(side===2){ this.x=Math.random()*w; this.y=h-padding; }
+            else{ this.x=padding; this.y=Math.random()*h; }
             
             const hpMult = Math.pow(1.22, game.level - 1);
             this.baseHp = 20 + game.level * 5; 
@@ -325,7 +411,8 @@
                 this.x += Math.cos(angle) * spd;
                 this.y += Math.sin(angle) * spd;
             }
-            if (dist(this.x, this.y, hero.x, hero.y) < this.size + 8) gameOver();
+            // 使用距离平方
+            if (distSq(this.x, this.y, hero.x, hero.y) < (this.size + 8)**2) gameOver();
         }
         drawOpaque() {
             ctx.save(); ctx.translate(this.x, this.y);
@@ -346,12 +433,19 @@
             let strokeColor;
             if (this.frozenTimer > 0) strokeColor = '#00ffff'; 
             else strokeColor = `hsl(${this.hue}, 100%, 60%)`; 
-            ctx.shadowBlur = 10; ctx.shadowColor = strokeColor;
+            
+            // 优化：使用图片辉光替代 shadowBlur
+            ctx.globalCompositeOperation = 'lighter';
+            // 绘制辉光图，稍微放大一点
+            const glowSize = this.size * 3;
+            ctx.drawImage(glowSprite, -glowSize/2, -glowSize/2, glowSize, glowSize);
+            ctx.globalCompositeOperation = 'source-over';
+
             ctx.strokeStyle = strokeColor; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(0, -this.size); ctx.lineTo(this.size, 0); ctx.lineTo(0, this.size); ctx.lineTo(-this.size, 0); ctx.closePath();
             ctx.stroke();
             if (this.flashColor) {
-                ctx.shadowBlur = 15; ctx.shadowColor = this.flashColor;
+                // Flash时不需要 shadowBlur，直接加粗线条
                 ctx.strokeStyle = this.flashColor; ctx.lineWidth = 4;
                 ctx.beginPath(); ctx.moveTo(0, -this.size); ctx.lineTo(this.size, 0); ctx.lineTo(0, this.size); ctx.lineTo(-this.size, 0); ctx.closePath();
                 ctx.stroke();
@@ -361,20 +455,18 @@
         }
     }
 
-    // 修复的核心：升级 Particle 类以支持所有类型的渲染数据
     class Particle {
         constructor() { this.active = false; }
-        // 增加 tx, ty 参数用于闪电和波纹
         init(x, y, vx, vy, life, size, color, type, text, tx, ty) {
             this.active = true;
             this.x = x; this.y = y; this.vx = vx; this.vy = vy;
             this.life = life; this.maxLife = life; this.size = size;
             this.color = color; this.type = type; this.text = text;
-            this.tx = tx; this.ty = ty; // Target X/Y for lightning/wave
+            this.tx = tx; this.ty = ty; 
         }
         update() {
             if(this.type === 'wave') {
-                this.size += 10; // 波纹扩散
+                this.size += 10; 
                 this.life--;
                 return;
             }
@@ -403,12 +495,12 @@
             } else if (this.type === 'wave') {
                 ctx.globalAlpha = alpha; ctx.strokeStyle = this.color; 
                 ctx.lineWidth = Math.max(1, 5 * alpha); 
-                ctx.shadowBlur = 20; ctx.shadowColor = this.color;
+                // 移除 shadowBlur
                 ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.stroke();
             } else if (this.type === 'lightning') {
                 ctx.globalAlpha=Math.max(0, alpha); ctx.strokeStyle=this.color; ctx.lineWidth=3;
                 ctx.beginPath();
-                let px = this.tx, py = this.ty; // 使用 tx/ty 作为起点/终点逻辑
+                let px = this.tx, py = this.ty; 
                 ctx.moveTo(px, py);
                 for(let i=0; i<8; i++) {
                     px += (this.x - px) * 0.1 + (Math.random()-0.5)*50;
@@ -440,7 +532,9 @@
                 <div class="card-title">${s.title}</div>
                 <div class="card-desc">${s.desc}</div>
             `;
+            // 支持触摸和点击
             div.onclick = () => startGame(s.key);
+            div.ontouchstart = (e) => { e.preventDefault(); startGame(s.key); };
             container.appendChild(div);
         });
     }
@@ -452,7 +546,8 @@
         document.getElementById('start-screen').style.display = 'none';
         game.state = 'RUNNING';
         
-        grid = new GridSystem(canvas.width, canvas.height, GRID_SIZE);
+        // 使用 window 尺寸初始化网格
+        grid = new GridSystem(window.innerWidth, window.innerHeight, GRID_SIZE);
         if(!cacheReady) initCache();
         
         bullets = []; enemies = []; particles = [];
@@ -460,14 +555,19 @@
     }
 
     window.addEventListener('resize', () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        resizeCanvas();
         initCache();
-        if (game.state === 'RUNNING') grid = new GridSystem(canvas.width, canvas.height, GRID_SIZE);
+        if (game.state === 'RUNNING') grid = new GridSystem(window.innerWidth, window.innerHeight, GRID_SIZE);
+        hero.x = window.innerWidth / 2;
+        hero.y = window.innerHeight / 2;
     });
 
-    window.addEventListener('mousedown', () => {
+    // 适配移动端交互：触摸切换武器
+    const handleInput = (e) => {
         if (game.state !== 'RUNNING') return;
+        // 如果是触摸事件，阻止默认行为（缩放等）
+        if (e.type === 'touchstart') e.preventDefault(); 
+        
         const keys = Object.keys(WEAPONS);
         let idx = keys.indexOf(game.currentWeaponKey);
         for(let i=0; i<keys.length; i++) {
@@ -479,7 +579,9 @@
                 break;
             }
         }
-    });
+    };
+    window.addEventListener('mousedown', handleInput);
+    window.addEventListener('touchstart', handleInput, { passive: false });
 
     function fireWeapon() {
         const w = WEAPONS[game.currentWeaponKey];
@@ -556,7 +658,8 @@
                 break;
             case 'aoe_mid_dmg':
                 enemies.forEach(e => {
-                    if (dist(e.x, e.y, hero.x, hero.y) < 250) hitEnemy(e, dmgBase * 1.5 * game.stats.atk, config.color, SRC);
+                    // 使用 distSq 优化范围判断: 250^2 = 62500
+                    if (distSq(e.x, e.y, hero.x, hero.y) < 62500) hitEnemy(e, dmgBase * 1.5 * game.stats.atk, config.color, SRC);
                 });
                 createWaveEffect(hero.x, hero.y, 250, config.color);
                 break;
@@ -576,26 +679,23 @@
                 }
                 break;
             case 'aoe_slow': 
-                enemies.forEach(e => { if (dist(e.x, e.y, hero.x, hero.y) < 300) e.slowTimer = 120; });
+                enemies.forEach(e => { 
+                    // 300^2 = 90000
+                    if (distSq(e.x, e.y, hero.x, hero.y) < 90000) e.slowTimer = 120; 
+                });
                 createWaveEffect(hero.x, hero.y, 300, config.color);
                 break;
         }
     }
 
-    // [修复] 使用对象池创建闪电，防止纯对象污染池子
     function createLightningEffect(target, source, color) {
         const p = getFromPool('particles', ()=>new Particle());
-        // init参数: x, y, vx, vy, life, size, color, type, text, tx, ty
-        // 我们利用 tx, ty 存储 source 的坐标，x, y 存储 target 的坐标
         p.init(target.x, target.y, 0, 0, 15, 3, color, 'lightning', '', source.x, source.y);
         particles.push(p);
     }
 
-    // [修复] 使用对象池创建波纹
     function createWaveEffect(x, y, maxR, color) {
         const p = getFromPool('particles', ()=>new Particle());
-        // 这里的 tx, ty 参数暂时不用，或者用来存 maxR 逻辑（如果需要限制大小），这里简化为利用 size 增长
-        // 波纹逻辑在 update 中写死了 size+=10，如果想动态控制 maxR 可以在 Particle 类里加字段，目前这样足够了
         p.init(x, y, 0, 0, 20, 10, color, 'wave', '', 0, 0);
         particles.push(p);
     }
@@ -698,7 +798,12 @@
                 <div class="card-tag">${opt.tag}</div>
                 <div class="card-desc">${opt.desc}</div>
             `;
-            div.onclick = () => { opt.fn(); resumeGame(); };
+            const pick = (e) => { 
+                if(e) e.stopPropagation();
+                opt.fn(); resumeGame(); 
+            };
+            div.onclick = pick;
+            div.ontouchstart = (e) => { e.preventDefault(); pick(e); };
             box.appendChild(div);
         });
     }
@@ -717,10 +822,14 @@
     }
     function getNearestEnemy(x,y) {
         let near=null, min=Infinity;
-        for(let e of enemies) { const d=dist(x,y,e.x,e.y); if(d<min){min=d;near=e;} }
+        // 使用距离平方比较，更高效
+        for(let e of enemies) { 
+            const dSq = distSq(x,y,e.x,e.y); 
+            if(dSq<min){min=dSq;near=e;} 
+        }
         return near;
     }
-    function dist(x1,y1,x2,y2){ return Math.hypot(x1-x2,y1-y2); }
+    
     function gameOver() {
         game.state = 'GAMEOVER';
         document.getElementById('final-score').innerText = game.score;
@@ -739,8 +848,8 @@
         
         updateScreenShake();
         ctx.globalCompositeOperation = 'source-over'; 
-        ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
-        if (cacheReady) ctx.drawImage(gridCacheCanvas, 0, 0);
+        ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr); 
+        if (cacheReady) ctx.drawImage(gridCacheCanvas, 0, 0, canvas.width / dpr, canvas.height / dpr);
         
         ctx.save();
         ctx.translate(screenShake.x, screenShake.y); 
@@ -773,7 +882,12 @@
         for(let i=bullets.length-1; i>=0; i--) {
             let b = bullets[i]; 
             b.update(); 
-            if(b.life<=0 || b.x<0 || b.x>canvas.width || b.y<0 || b.y>canvas.height) {
+            const margin = 50;
+            // 获取逻辑画布尺寸
+            const logicalW = canvas.width / dpr;
+            const logicalH = canvas.height / dpr;
+
+            if(b.life<=0 || b.x<-margin || b.x>logicalW+margin || b.y<-margin || b.y>logicalH+margin) {
                  b.active = false; returnToPool('bullets', b);
                  bullets[i] = bullets[bullets.length-1]; bullets.pop();
             }
@@ -788,17 +902,21 @@
             }
         }
         
+        // 核心优化：GridSystem Zero-GC Query
         bullets.forEach(b => {
             if (b.life <= 0) return;
-            const nearbyEnemies = grid.query(b.x, b.y);
-            for (const e of nearbyEnemies) {
-                if (e.dead) continue; 
-                if (dist(b.x, b.y, e.x, e.y) < e.size + b.radius + 2) {
+            // 传入回调函数而非接收数组
+            grid.query(b.x, b.y, (e) => {
+                if (e.dead || b.life <= 0) return; // 再次检查 b.life
+                
+                // 使用 distSq (r+r)^2 进行比较，避免开方
+                const safeDist = e.size + b.radius + 2;
+                if (distSq(b.x, b.y, e.x, e.y) < safeDist * safeDist) {
                     hitEnemy(e, b.damage, b.color, 'WEAPON'); 
                     if (b.pierce > 0) b.pierce--;
-                    else { b.life = 0; break; }
+                    else { b.life = 0; }
                 }
-            }
+            });
         });
 
         ctx.globalCompositeOperation = 'source-over'; 
