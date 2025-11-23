@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Evolution: 稳定版</title>
+    <style>
+        body {
+            margin: 0; padding: 0;
+            background-color: #050505;
+            color: #fff;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+        #gameContainer { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        canvas {
+            box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
+            background: #000; 
+            cursor: crosshair;
+        }
+        
+        #ui-layer {
+            position: absolute; top: 20px; left: 20px;
+            pointer-events: none;
+            display: flex; flex-direction: column; gap: 8px;
+            z-index: 10;
+        }
+        .stat-row { font-size: 14px; color: #888; text-shadow: 1px 1px 0 #000; font-weight: bold; letter-spacing: 1px; }
+        .stat-val { color: #fff; font-size: 18px; }
+        
+        #weapon-display {
+            margin-top: 10px; padding: 12px;
+            background: rgba(0,0,0,0.7);
+            border-left: 4px solid #00ffff;
+            border-radius: 0 8px 8px 0;
+            transition: all 0.3s;
+        }
+        #weapon-name { font-size: 20px; font-weight: 900; color: #00ffff; text-transform: uppercase; letter-spacing: 1px; }
+        #weapon-desc { font-size: 12px; color: #bbb; margin-top: 4px; }
+
+        #mods-container {
+            position: absolute; bottom: 20px; left: 20px;
+            display: flex; flex-direction: column-reverse; gap: 4px;
+            pointer-events: none;
+            max-height: 300px; overflow: hidden;
+        }
+        .mod-item {
+            font-size: 11px; color: #ddd; background: rgba(0,0,0,0.6);
+            padding: 3px 8px; border-radius: 4px; border-left: 3px solid #ffd700;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        .overlay-panel {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5, 5, 5, 0.92);
+            z-index: 100;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            backdrop-filter: blur(8px);
+        }
+        
+        .class-container { display: flex; gap: 25px; margin-top: 30px; flex-wrap: wrap; justify-content: center; }
+        .card {
+            width: 200px; height: 320px;
+            background: linear-gradient(160deg, #1a1a2e, #12121a);
+            border: 1px solid #444; border-radius: 10px;
+            padding: 15px; cursor: pointer; text-align: center;
+            transition: 0.2s; position: relative; overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .card:hover { transform: translateY(-10px); border-color: #00ffff; box-shadow: 0 0 30px rgba(0, 255, 255, 0.2); }
+        .card-icon { font-size: 36px; margin: 15px 0; }
+        .card-title { font-size: 18px; font-weight: bold; color: #fff; margin-bottom: 10px; }
+        .card-tag { background: #333; color: #0ff; padding: 2px 6px; font-size: 10px; border-radius: 3px; margin-bottom: 10px; text-transform: uppercase; }
+        .card-desc { font-size: 12px; color: #aaa; line-height: 1.5; }
+
+        button.action-btn {
+            padding: 12px 40px; background: #ff0055; border: none; color: white; 
+            font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 30px;
+            border-radius: 4px; transition: 0.2s;
+        }
+        button.action-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px #ff0055; }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <canvas id="canvas"></canvas>
+    
+    <div id="ui-layer">
+        <div class="stat-row">LVL <span class="stat-val" id="ui-lvl" style="color:#ffe600">1</span></div>
+        <div class="stat-row">SCR <span class="stat-val" id="ui-score">0</span></div>
+        
+        <div id="weapon-display">
+            <div id="weapon-name">WEAPON</div>
+            <div id="weapon-desc">...</div>
+        </div>
+    </div>
+    
+    <div id="mods-container"></div>
+
+    <div id="start-screen" class="overlay-panel">
+        <h1 style="color: #fff; text-shadow: 0 0 15px #00ffff; font-size: 32px; letter-spacing: 3px;">NEON EVOLUTION</h1>
+        <p style="color: #666; font-size: 12px; margin-bottom: 10px;">SYSTEM STABLE</p>
+        <div class="class-container" id="start-cards"></div>
+    </div>
+
+    <div id="upgrade-panel" class="overlay-panel" style="display: none;">
+        <h1 style="color: #ffd700; text-shadow: 0 0 20px orange; font-size: 28px;">SYSTEM UPGRADE</h1>
+        <div class="class-container" id="upgrade-cards"></div>
+    </div>
+
+    <div id="gameOver" class="overlay-panel" style="display: none;">
+        <h1 style="color:#ff3333; font-size:40px; text-shadow: 0 0 20px darkred;">TERMINATED</h1>
+        <p style="color:#ccc; margin-top: 10px;">SCORE: <span id="final-score" style="color:#fff; font-weight:bold;">0</span></p>
+        <button class="action-btn" onclick="location.reload()">REBOOT SYSTEM</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    const WEAPONS = {
+        rapid: { 
+            name: "毒蛇 (Viper)", type: 'rapid', desc: "高频 / 触发流",
+            color: '#00ffcc', cd: 7, unlocked: false 
+        },
+        cannon: { 
+            name: "加农 (Cannon)", type: 'sniper', desc: "重击 / 穿透",
+            color: '#ff0055', cd: 60, unlocked: false 
+        }
+    };
+
+    const MODS_CONFIG = {
+        'single_dmg': { 
+            icon: '💥', name: "聚焦爆破", color: '#ff3333', desc: "对最近目标造成单体高伤", 
+            hitRange: [18, 25], dmgRange: [600, 800] 
+        },
+        'aoe_mid_dmg': { 
+            icon: '🌟', name: "星爆震击", color: '#0088ff', desc: "范围震击，造成中等伤害", 
+            hitRange: [8, 12], dmgRange: [350, 450] 
+        },
+        'aoe_full_dmg': { 
+            icon: '💣', name: "末日清屏", color: '#ffffff', desc: "全屏清杂，造成低等伤害", 
+            hitRange: [12, 18], dmgRange: [450, 550] 
+        },
+        'aoe_full_control': { 
+            icon: '⏳', name: "时空停止", color: '#ffd700', desc: "全屏敌人短暂停滞", 
+            hitRange: [45, 60], dmgRange: [1100, 1300] 
+        },
+        'single_control': { 
+            icon: '🔗', name: "维度束缚", color: '#aa00ff', desc: "对最近目标进行单体禁锢", 
+            hitRange: [25, 35], dmgRange: [800, 1000] 
+        },
+        'aoe_slow': { 
+            icon: '❄️', name: "冰霜减速", color: '#00ffff', desc: "范围减速敌人移动速度", 
+            hitRange: [8, 12], dmgRange: [250, 350] 
+        },
+    };
+    
+    const BASE_ENEMY_HP = 20;
+
+    const game = {
+        state: 'START', frame: 0, score: 0, level: 1, xp: 0, xpNeeded: 100,
+        currentWeaponKey: 'rapid',
+        difficulty: 0, 
+        stats: { atk: 1.0, spd: 1.0, amount: 0 },
+        mods: [], 
+        totalHits: 0, totalDmg: 0
+    };
+
+    const GRID_SIZE = 150; 
+    let grid = null;
+
+    class GridSystem {
+        constructor(width, height, size) {
+            this.width = width; this.height = height; this.size = size;
+            this.cols = Math.ceil(width / size);
+            this.rows = Math.ceil(height / size);
+            this.cells = Array.from({ length: this.cols * this.rows }, () => []);
+        }
+        getGridIndex(x, y) {
+            const col = Math.floor(x / this.size);
+            const row = Math.floor(y / this.size);
+            if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return -1;
+            return row * this.cols + col;
+        }
+        add(entity) {
+            const index = this.getGridIndex(entity.x, entity.y);
+            if (index !== -1) this.cells[index].push(entity);
+        }
+        query(x, y) {
+            const col = Math.floor(x / this.size);
+            const row = Math.floor(y / this.size);
+            const nearby = [];
+            for (let r = row - 1; r <= row + 1; r++) {
+                for (let c = col - 1; c <= col + 1; c++) {
+                    const index = r * this.cols + c;
+                    if (index >= 0 && index < this.cells.length) {
+                        nearby.push(...this.cells[index]);
+                    }
+                }
+            }
+            return nearby;
+        }
+        clear() { this.cells.forEach(cell => cell.length = 0); }
+    }
+
+    // 缓存
+    let gridCacheCanvas, gridCacheCtx, cacheReady = false;
+    function initCache() {
+        gridCacheCanvas = document.createElement('canvas');
+        gridCacheCanvas.width = canvas.width;
+        gridCacheCanvas.height = canvas.height;
+        gridCacheCtx = gridCacheCanvas.getContext('2d');
+        gridCacheCtx.fillStyle = '#050505';
+        gridCacheCtx.fillRect(0, 0, canvas.width, canvas.height);
+        const spacing = 40;
+        gridCacheCtx.strokeStyle = 'rgba(0, 255, 255, 0.05)';
+        gridCacheCtx.lineWidth = 1;
+        gridCacheCtx.beginPath();
+        for (let x = 0; x < canvas.width; x += spacing) { gridCacheCtx.moveTo(x, 0); gridCacheCtx.lineTo(x, canvas.height); }
+        for (let y = 0; y < canvas.height; y += spacing) { gridCacheCtx.moveTo(0, y); gridCacheCtx.lineTo(canvas.width, y); }
+        gridCacheCtx.stroke();
+        cacheReady = true;
+    }
+
+    // 对象池
+    const POOL = { bullets: [], particles: [], enemies: [] };
+    function getFromPool(type, factory) {
+        return POOL[type].length > 0 ? POOL[type].pop() : factory();
+    }
+    function returnToPool(type, obj) {
+        POOL[type].push(obj);
+    }
+
+    // --- 实体类 ---
+
+    class Hero {
+        constructor() {
+            this.x = canvas.width / 2; this.y = canvas.height / 2;
+            this.angle = 0; this.cooldown = 0;
+            this.size = 12;
+        }
+        update() {
+            const target = getNearestEnemy(this.x, this.y);
+            if (target) {
+                this.angle = Math.atan2(target.y - this.y, target.x - this.x);
+            } else {
+                this.angle += 0.02; 
+            }
+            if (this.cooldown > 0) this.cooldown--;
+            if (this.cooldown <= 0) fireWeapon(); 
+        }
+        draw() {
+            ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
+            const w = WEAPONS[game.currentWeaponKey];
+            ctx.shadowBlur = 10; ctx.shadowColor = w.color;
+            ctx.fillStyle = '#222'; ctx.strokeStyle = w.color; ctx.lineWidth = 2;
+            ctx.beginPath(); 
+            ctx.moveTo(12, 0); ctx.lineTo(-8, 8); ctx.lineTo(-5, 0); ctx.lineTo(-8, -8); 
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    class Bullet {
+        constructor() { this.active = false; }
+        init(x, y, angle, weaponKey) {
+            const w = WEAPONS[weaponKey];
+            this.x = x; this.y = y; this.type = w.type; this.color = w.color;
+            this.radius = 2; let speed = 14; let baseDmg = 8;
+            this.pierce = 0; this.life = 80; this.active = true;
+            if (this.type === 'sniper') { speed = 20; baseDmg = 60; this.pierce = 3; this.radius = 4; }
+            this.damage = (baseDmg + game.level * 1.2) * game.stats.atk;
+            this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+        }
+        update() { this.x += this.vx; this.y += this.vy; this.life--; }
+        draw() {
+            if (!this.active) return;
+            ctx.fillStyle = this.color;
+            ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = this.color; ctx.lineWidth = this.radius;
+            ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.x - this.vx*2, this.y - this.vy*2); ctx.stroke();
+        }
+    }
+
+    class Enemy {
+        constructor() { this.active = true; this.init(); }
+        init() {
+            this.active = true;
+            const side = Math.floor(Math.random() * 4);
+            const padding = 20; 
+            if(side===0){ this.x=Math.random()*canvas.width; this.y=padding; }
+            else if(side===1){ this.x=canvas.width-padding; this.y=Math.random()*canvas.height; }
+            else if(side===2){ this.x=Math.random()*canvas.width; this.y=canvas.height-padding; }
+            else{ this.x=padding; this.y=Math.random()*canvas.height; }
+            
+            const hpMult = Math.pow(1.22, game.level - 1);
+            this.baseHp = 20 + game.level * 5; 
+            this.maxHp = Math.floor(this.baseHp * hpMult);
+            this.hp = this.maxHp;
+            
+            const speedMalus = Math.min(2.0, this.maxHp / 120);
+            this.baseSpeed = Math.max(0.6, (3.0 + game.level*0.03) - speedMalus);
+            
+            this.size = 10 + (this.maxHp/BASE_ENEMY_HP)*3;
+            if(this.size > 30) this.size = 30;
+            this.hue = Math.random() * 40; 
+            this.frozenTimer = 0; this.slowTimer = 0;
+            this.dead = false; this.flashColor = null; this.hitFlash = 0;
+        }
+        update() {
+            let spd = this.baseSpeed;
+            if (this.frozenTimer > 0) { this.frozenTimer--; spd = 0; }
+            else if (this.slowTimer > 0) { this.slowTimer--; spd *= 0.4; }
+            if (spd > 0) {
+                const angle = Math.atan2(hero.y - this.y, hero.x - this.x);
+                this.x += Math.cos(angle) * spd;
+                this.y += Math.sin(angle) * spd;
+            }
+            if (dist(this.x, this.y, hero.x, hero.y) < this.size + 8) gameOver();
+        }
+        drawOpaque() {
+            ctx.save(); ctx.translate(this.x, this.y);
+            const pct = Math.max(0, this.hp/this.maxHp);
+            ctx.fillStyle = '#222'; ctx.fillRect(-this.size, -this.size-6, this.size*2, 3);
+            ctx.fillStyle = '#0f0'; ctx.fillRect(-this.size, -this.size-6, this.size*2*pct, 3);
+            let fillColor;
+            if (this.hitFlash > 0) fillColor = '#fff'; 
+            else if (this.frozenTimer > 0) fillColor = '#0ff'; 
+            else fillColor = `hsl(${this.hue}, 70%, 40%)`; 
+            ctx.fillStyle = fillColor;
+            ctx.beginPath(); ctx.moveTo(0, -this.size); ctx.lineTo(this.size, 0); ctx.lineTo(0, this.size); ctx.lineTo(-this.size, 0); ctx.closePath();
+            ctx.fill(); 
+            ctx.restore();
+        }
+        drawGlow() {
+            ctx.save(); ctx.translate(this.x, this.y);
+            let strokeColor;
+            if (this.frozenTimer > 0) strokeColor = '#00ffff'; 
+            else strokeColor = `hsl(${this.hue}, 100%, 60%)`; 
+            ctx.shadowBlur = 10; ctx.shadowColor = strokeColor;
+            ctx.strokeStyle = strokeColor; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(0, -this.size); ctx.lineTo(this.size, 0); ctx.lineTo(0, this.size); ctx.lineTo(-this.size, 0); ctx.closePath();
+            ctx.stroke();
+            if (this.flashColor) {
+                ctx.shadowBlur = 15; ctx.shadowColor = this.flashColor;
+                ctx.strokeStyle = this.flashColor; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(0, -this.size); ctx.lineTo(this.size, 0); ctx.lineTo(0, this.size); ctx.lineTo(-this.size, 0); ctx.closePath();
+                ctx.stroke();
+                if (this.hitFlash === 0) this.flashColor = null; 
+            }
+            ctx.restore();
+        }
+    }
+
+    // 修复的核心：升级 Particle 类以支持所有类型的渲染数据
+    class Particle {
+        constructor() { this.active = false; }
+        // 增加 tx, ty 参数用于闪电和波纹
+        init(x, y, vx, vy, life, size, color, type, text, tx, ty) {
+            this.active = true;
+            this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+            this.life = life; this.maxLife = life; this.size = size;
+            this.color = color; this.type = type; this.text = text;
+            this.tx = tx; this.ty = ty; // Target X/Y for lightning/wave
+        }
+        update() {
+            if(this.type === 'wave') {
+                this.size += 10; // 波纹扩散
+                this.life--;
+                return;
+            }
+            if(this.type === 'lightning') {
+                this.life--;
+                return;
+            }
+            this.x += this.vx; this.y += this.vy; this.life--;
+            if (this.type === 'spark') { this.vx *= 0.98; this.vy *= 0.98; }
+        }
+        draw() {
+            const alpha = this.life / this.maxLife;
+            if (this.type === 'text') {
+                ctx.save();
+                ctx.font = `800 ${this.size}px 'Courier New', monospace`;
+                ctx.fillStyle = this.color;
+                ctx.textAlign = 'center';
+                ctx.shadowBlur = 0; 
+                ctx.globalAlpha = alpha;
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            } else if (this.type === 'spark') {
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = alpha;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size * alpha, 0, Math.PI * 2); ctx.fill();
+            } else if (this.type === 'wave') {
+                ctx.globalAlpha = alpha; ctx.strokeStyle = this.color; 
+                ctx.lineWidth = Math.max(1, 5 * alpha); 
+                ctx.shadowBlur = 20; ctx.shadowColor = this.color;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.stroke();
+            } else if (this.type === 'lightning') {
+                ctx.globalAlpha=Math.max(0, alpha); ctx.strokeStyle=this.color; ctx.lineWidth=3;
+                ctx.beginPath();
+                let px = this.tx, py = this.ty; // 使用 tx/ty 作为起点/终点逻辑
+                ctx.moveTo(px, py);
+                for(let i=0; i<8; i++) {
+                    px += (this.x - px) * 0.1 + (Math.random()-0.5)*50;
+                    py += (this.y - py) * 0.1 + (Math.random()-0.5)*50;
+                    ctx.lineTo(px, py);
+                }
+                ctx.lineTo(this.x, this.y); ctx.stroke();
+            }
+        }
+    }
+
+    const hero = new Hero();
+    let bullets = [], enemies = [], particles = [];
+    let screenShake = { x: 0, y: 0, duration: 0, intensity: 0 };
+
+    // --- 逻辑 ---
+    
+    function initStartScreen() {
+        const container = document.getElementById('start-cards');
+        const starters = [
+            { key: 'rapid', icon: '⚡', title: "机动兵", desc: "初始武器：毒蛇机枪<br>高频射击，擅长触发特效。" },
+            { key: 'cannon', icon: '💣', title: "重炮手", desc: "初始武器：重型加农<br>单发高伤，自带穿透效果。" }
+        ];
+        starters.forEach(s => {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.innerHTML = `
+                <div class="card-icon" style="color:${WEAPONS[s.key].color}">${s.icon}</div>
+                <div class="card-title">${s.title}</div>
+                <div class="card-desc">${s.desc}</div>
+            `;
+            div.onclick = () => startGame(s.key);
+            container.appendChild(div);
+        });
+    }
+
+    function startGame(key) {
+        WEAPONS[key].unlocked = true;
+        game.currentWeaponKey = key;
+        updateWeaponUI();
+        document.getElementById('start-screen').style.display = 'none';
+        game.state = 'RUNNING';
+        
+        grid = new GridSystem(canvas.width, canvas.height, GRID_SIZE);
+        if(!cacheReady) initCache();
+        
+        bullets = []; enemies = []; particles = [];
+        loop();
+    }
+
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        initCache();
+        if (game.state === 'RUNNING') grid = new GridSystem(canvas.width, canvas.height, GRID_SIZE);
+    });
+
+    window.addEventListener('mousedown', () => {
+        if (game.state !== 'RUNNING') return;
+        const keys = Object.keys(WEAPONS);
+        let idx = keys.indexOf(game.currentWeaponKey);
+        for(let i=0; i<keys.length; i++) {
+            idx = (idx + 1) % keys.length;
+            if (WEAPONS[keys[idx]].unlocked) {
+                game.currentWeaponKey = keys[idx];
+                updateWeaponUI();
+                createFloatingText(hero.x, hero.y - 20, "SWITCH", "#fff", 12);
+                break;
+            }
+        }
+    });
+
+    function fireWeapon() {
+        const w = WEAPONS[game.currentWeaponKey];
+        hero.cooldown = w.cd / game.stats.spd;
+        const baseCount = (w.type === 'sniper') ? 1 : 1;
+        const extraCount = game.stats.amount; 
+        const totalCount = baseCount + extraCount;
+        let spread = 0.15; 
+        const startAngle = hero.angle - spread/2;
+        const step = (totalCount > 1) ? spread / (totalCount - 1) : 0;
+
+        for(let i=0; i<totalCount; i++) {
+            let fireAngle = hero.angle;
+            if (totalCount > 1) fireAngle = startAngle + i * step;
+            const b = getFromPool('bullets', ()=>new Bullet());
+            b.init(hero.x, hero.y, fireAngle, game.currentWeaponKey);
+            bullets.push(b);
+        }
+    }
+
+    function hitEnemy(e, dmg, color, source) {
+        if(!e.active) return;
+        
+        e.hp -= dmg; e.hitFlash = 4; 
+        
+        if(source === 'WEAPON' || Math.random()>0.5) { 
+            createFloatingText(e.x, e.y, Math.floor(dmg), color, 10); 
+        }
+    
+        if(source === 'WEAPON') { 
+            game.totalHits++; 
+            checkMods(source); 
+        }
+        game.totalDmg += dmg;
+        createParticle(e.x, e.y, color, 1);
+
+        if (e.hp <= 0) {
+            e.active = false; e.dead = true;
+            const xpGained = Math.max(10, Math.floor(e.maxHp / BASE_ENEMY_HP * 100));
+            game.xp += 10; 
+            game.score += Math.floor(xpGained / 2);
+            createParticle(e.x, e.y, color, 6);
+            checkLevelUp();
+        }
+    }
+
+    function checkMods(source) {
+        if (source !== 'WEAPON') return; 
+        game.mods.forEach(m => {
+            let trigger = false;
+            if (m.type === 'hit' && game.totalHits % m.thresh === 0) trigger = true;
+            else if (m.type === 'dmg' && game.totalDmg > m.nextTrigger) {
+                m.nextTrigger += m.thresh * Math.floor((game.totalDmg - m.nextTrigger) / m.thresh + 1); 
+                trigger = true;
+            }
+            if (trigger) activateModEffect(m.spell);
+        });
+    }
+
+    function activateModEffect(key) {
+        const config = MODS_CONFIG[key];
+        if(Math.random() > 0.3) createFloatingText(hero.x, hero.y - 50, config.name, config.color, 16);
+        const target = getNearestEnemy(hero.x, hero.y);
+        const dmgBase = 100;
+        const SRC = 'MOD';
+
+        switch (key) {
+            case 'single_dmg':
+                if (target) {
+                    target.flashColor = config.color; target.hitFlash = 5;
+                    hitEnemy(target, dmgBase * 5 * game.stats.atk + (target.maxHp * 0.1), config.color, SRC); 
+                    createLightningEffect(target, hero, config.color);
+                }
+                break;
+            case 'aoe_mid_dmg':
+                enemies.forEach(e => {
+                    if (dist(e.x, e.y, hero.x, hero.y) < 250) hitEnemy(e, dmgBase * 1.5 * game.stats.atk, config.color, SRC);
+                });
+                createWaveEffect(hero.x, hero.y, 250, config.color);
+                break;
+            case 'aoe_full_dmg':
+                screenShake.duration = 10; screenShake.intensity = 5;
+                enemies.forEach(e => {
+                    hitEnemy(e, dmgBase * 0.5 * game.stats.atk, config.color, SRC);
+                });
+                break;
+            case 'aoe_full_control': 
+                enemies.forEach(e => { e.frozenTimer = 120; });
+                break;
+            case 'single_control': 
+                if (target) {
+                    target.flashColor = config.color; target.hitFlash = 5; target.frozenTimer = 90; 
+                    hitEnemy(target, dmgBase * 3 * game.stats.atk, config.color, SRC);
+                }
+                break;
+            case 'aoe_slow': 
+                enemies.forEach(e => { if (dist(e.x, e.y, hero.x, hero.y) < 300) e.slowTimer = 120; });
+                createWaveEffect(hero.x, hero.y, 300, config.color);
+                break;
+        }
+    }
+
+    // [修复] 使用对象池创建闪电，防止纯对象污染池子
+    function createLightningEffect(target, source, color) {
+        const p = getFromPool('particles', ()=>new Particle());
+        // init参数: x, y, vx, vy, life, size, color, type, text, tx, ty
+        // 我们利用 tx, ty 存储 source 的坐标，x, y 存储 target 的坐标
+        p.init(target.x, target.y, 0, 0, 15, 3, color, 'lightning', '', source.x, source.y);
+        particles.push(p);
+    }
+
+    // [修复] 使用对象池创建波纹
+    function createWaveEffect(x, y, maxR, color) {
+        const p = getFromPool('particles', ()=>new Particle());
+        // 这里的 tx, ty 参数暂时不用，或者用来存 maxR 逻辑（如果需要限制大小），这里简化为利用 size 增长
+        // 波纹逻辑在 update 中写死了 size+=10，如果想动态控制 maxR 可以在 Particle 类里加字段，目前这样足够了
+        p.init(x, y, 0, 0, 20, 10, color, 'wave', '', 0, 0);
+        particles.push(p);
+    }
+
+    function createParticle(x, y, color, count) {
+        for(let i=0; i<count; i++) {
+            if (particles.length >= 600) return; 
+            const vx = (Math.random()-0.5)*4; const vy = (Math.random()-0.5)*4;
+            const p = getFromPool('particles', ()=>new Particle());
+            p.init(x, y, vx, vy, 30, 2, color, 'spark');
+            particles.push(p);
+        }
+    }
+
+    function createFloatingText(x, y, text, color, size) {
+        if(game.state !== 'RUNNING') return;
+        const p = getFromPool('particles', ()=>new Particle());
+        p.init(x, y, 0, -1.5, 60, size, color, 'text', text);
+        particles.push(p);
+    }
+
+    function checkLevelUp() {
+        if (game.xp >= game.xpNeeded) {
+            game.state = 'PAUSED';
+            game.level++; game.xp = 0; 
+            game.xpNeeded = Math.floor(game.xpNeeded * 1.25); 
+            document.getElementById('ui-lvl').innerText = game.level;
+            showUpgradeMenu();
+        }
+        document.getElementById('ui-score').innerText = game.score;
+    }
+    
+    function getRandomRange(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+    function showUpgradeMenu() {
+        const panel = document.getElementById('upgrade-panel');
+        const box = document.getElementById('upgrade-cards');
+        box.innerHTML = '';
+        panel.style.display = 'flex';
+        const options = [];
+
+        options.push({
+            icon: '💪', title: "全局伤害", tag: 'STAT', desc: "全局伤害倍率 +20%",
+            fn: () => game.stats.atk += 0.2
+        });
+        options.push({
+            icon: '🚀', title: "全局攻速", tag: 'STAT', desc: "全局攻速 +15%",
+            fn: () => game.stats.spd += 0.15
+        });
+        options.push({
+            icon: '➕', title: "投射物数量", tag: 'STAT', desc: "所有武器投射物数量 +1",
+            fn: () => game.stats.amount += 1
+        });
+
+        const modKeys = Object.keys(MODS_CONFIG);
+        const statsOptions = options.slice(0, 3);
+        const mod1Key = modKeys[Math.floor(Math.random() * modKeys.length)];
+        let mod2Key = modKeys[Math.floor(Math.random() * modKeys.length)];
+        while (mod2Key === mod1Key) mod2Key = modKeys[Math.floor(Math.random() * modKeys.length)];
+
+        [mod1Key, mod2Key].forEach(mKey => {
+            const config = MODS_CONFIG[mKey];
+            const isHit = Math.random() > 0.5;
+            let val;
+            if (isHit) {
+                const range = config.hitRange;
+                val = getRandomRange(range[0], range[1]);
+            } else {
+                const range = config.dmgRange;
+                let baseVal = getRandomRange(range[0], range[1]);
+                val = Math.floor(baseVal + game.level * 15); 
+            }
+            options.push({
+                icon: config.icon, title: `配件: ${config.name}`, tag: isHit?'ON HIT':'ON DMG',
+                desc: isHit ? `每命中 ${val} 次触发` : `每造成 ${val} 伤害触发`,
+                fn: () => {
+                    game.mods.push({ 
+                        type: isHit ? 'hit' : 'dmg', thresh: val, spell: mKey, nextTrigger: game.totalDmg + val 
+                    });
+                    const div = document.createElement('div');
+                    div.className = 'mod-item';
+                    div.innerHTML = `<span style="color:${config.color}">[${isHit?'击':'伤'}${val}] ${config.name}</span>`;
+                    document.getElementById('mods-container').appendChild(div);
+                }
+            });
+        });
+
+        const picked = [];
+        const statChoice = statsOptions[Math.floor(Math.random() * statsOptions.length)];
+        picked.push(statChoice);
+        picked.push(options[3]); 
+        picked.push(options[4]); 
+
+        picked.forEach(opt => {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.innerHTML = `
+                <div class="card-icon">${opt.icon}</div>
+                <div class="card-title">${opt.title}</div>
+                <div class="card-tag">${opt.tag}</div>
+                <div class="card-desc">${opt.desc}</div>
+            `;
+            div.onclick = () => { opt.fn(); resumeGame(); };
+            box.appendChild(div);
+        });
+    }
+
+    function resumeGame() {
+        document.getElementById('upgrade-panel').style.display = 'none';
+        game.state = 'RUNNING';
+        loop();
+    }
+    
+    function updateWeaponUI() {
+        const w = WEAPONS[game.currentWeaponKey];
+        document.getElementById('weapon-name').innerText = w.name;
+        document.getElementById('weapon-desc').innerText = w.desc;
+        document.getElementById('weapon-display').style.borderLeftColor = w.color;
+    }
+    function getNearestEnemy(x,y) {
+        let near=null, min=Infinity;
+        for(let e of enemies) { const d=dist(x,y,e.x,e.y); if(d<min){min=d;near=e;} }
+        return near;
+    }
+    function dist(x1,y1,x2,y2){ return Math.hypot(x1-x2,y1-y2); }
+    function gameOver() {
+        game.state = 'GAMEOVER';
+        document.getElementById('final-score').innerText = game.score;
+        document.getElementById('gameOver').style.display = 'flex';
+    }
+    function updateScreenShake() {
+        if (screenShake.duration > 0) {
+            screenShake.x = (Math.random() - 0.5) * screenShake.intensity * (screenShake.duration/10);
+            screenShake.y = (Math.random() - 0.5) * screenShake.intensity * (screenShake.duration/10);
+            screenShake.duration--;
+        } else { screenShake.x = 0; screenShake.y = 0; }
+    }
+
+    function loop() {
+        if(game.state !== 'RUNNING') return;
+        
+        updateScreenShake();
+        ctx.globalCompositeOperation = 'source-over'; 
+        ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
+        if (cacheReady) ctx.drawImage(gridCacheCanvas, 0, 0);
+        
+        ctx.save();
+        ctx.translate(screenShake.x, screenShake.y); 
+        game.frame++;
+
+        const baseRate = Math.max(20, 100 - game.level * 2); 
+        const spawnCount = 1 + Math.floor(game.level / 4); 
+        
+        if (enemies.length < 150 && game.frame % baseRate === 0) {
+            for(let i=0; i<spawnCount; i++) {
+                const e = getFromPool('enemies', ()=>new Enemy());
+                e.init(); 
+                enemies.push(e);
+            }
+        }
+        
+        grid.clear();
+        hero.update(); 
+        
+        for(let i=enemies.length-1; i>=0; i--) {
+            let e = enemies[i]; 
+            e.update(); 
+            if(e.dead) {
+                 returnToPool('enemies', e);
+                 enemies[i] = enemies[enemies.length-1];
+                 enemies.pop();
+            } else grid.add(e);
+        }
+
+        for(let i=bullets.length-1; i>=0; i--) {
+            let b = bullets[i]; 
+            b.update(); 
+            if(b.life<=0 || b.x<0 || b.x>canvas.width || b.y<0 || b.y>canvas.height) {
+                 b.active = false; returnToPool('bullets', b);
+                 bullets[i] = bullets[bullets.length-1]; bullets.pop();
+            }
+        }
+        
+        for(let i=particles.length-1; i>=0; i--) {
+            let p = particles[i]; 
+            p.update(); 
+            if(p.life<=0) {
+                 p.active = false; returnToPool('particles', p);
+                 particles[i] = particles[particles.length-1]; particles.pop();
+            }
+        }
+        
+        bullets.forEach(b => {
+            if (b.life <= 0) return;
+            const nearbyEnemies = grid.query(b.x, b.y);
+            for (const e of nearbyEnemies) {
+                if (e.dead) continue; 
+                if (dist(b.x, b.y, e.x, e.y) < e.size + b.radius + 2) {
+                    hitEnemy(e, b.damage, b.color, 'WEAPON'); 
+                    if (b.pierce > 0) b.pierce--;
+                    else { b.life = 0; break; }
+                }
+            }
+        });
+
+        ctx.globalCompositeOperation = 'source-over'; 
+        enemies.forEach(e => e.drawOpaque()); 
+        particles.forEach(p => { if(p.type === 'text') p.draw(); });
+
+        ctx.globalCompositeOperation = 'lighter'; 
+        hero.draw();
+        bullets.forEach(b => b.draw());
+        particles.forEach(p => { if(p.type !== 'text') p.draw(); });
+        enemies.forEach(e => e.drawGlow());
+        
+        ctx.restore(); 
+        ctx.globalCompositeOperation = 'source-over'; 
+
+        requestAnimationFrame(loop);
+    }
+
+    initStartScreen();
+
+</script>
+</body>
+</html>
