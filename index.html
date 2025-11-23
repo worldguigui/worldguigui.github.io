@@ -562,24 +562,31 @@
         hero.y = window.innerHeight / 2;
     });
 
-    // 适配移动端交互：触摸切换武器
+    // --- 新增：预定义的随机语句数组 ---
+    const FLAVOR_TEXTS = [
+        "350234",
+        "？",
+        "453365",
+        "1202344",
+        "多喝水",
+        "1190297",
+        "1211304"
+    ];
+
+    // --- 修改：点击不再切换武器，而是展示随机语句 ---
     const handleInput = (e) => {
         if (game.state !== 'RUNNING') return;
-        // 如果是触摸事件，阻止默认行为（缩放等）
+        // 阻止移动端触摸的默认缩放/滚动行为
         if (e.type === 'touchstart') e.preventDefault(); 
         
-        const keys = Object.keys(WEAPONS);
-        let idx = keys.indexOf(game.currentWeaponKey);
-        for(let i=0; i<keys.length; i++) {
-            idx = (idx + 1) % keys.length;
-            if (WEAPONS[keys[idx]].unlocked) {
-                game.currentWeaponKey = keys[idx];
-                updateWeaponUI();
-                createFloatingText(hero.x, hero.y - 20, "?", "#fff", 12);
-                break;
-            }
-        }
+        // 随机获取一句话
+        const text = FLAVOR_TEXTS[Math.floor(Math.random() * FLAVOR_TEXTS.length)];
+        
+        // 使用原有的 createFloatingText 方法展示
+        // 参数保持不变：位置(hero上方), 文本, 颜色(#fff), 大小(12)
+        createFloatingText(hero.x, hero.y - 30, text, "#fff", 12);
     };
+
     window.addEventListener('mousedown', handleInput);
     window.addEventListener('touchstart', handleInput, { passive: false });
 
@@ -940,4 +947,5 @@
 </script>
 </body>
 </html>
+
 
